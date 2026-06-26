@@ -20,7 +20,7 @@ if st.button("실시간 상호작용 종합 분석 시작"):
         
         # 🔑 하린이의 진짜 API 키 (AIzaSy로 시작하는 키)를 여기에 정확히 넣어줘!
         # 만약 아래 키로 에러가 나면 아까 구글 AI 스튜디오에서 복사한 진짜 키로 바꿔줘!
-        api_key = "AIzaSy" 
+        api_key = "AQ.Ab8RN6Io4apMxd1tWy-fJ_STORynv9U-X2hNkn13o8IifoFbfQ" 
         
         with st.spinner("🔍 구글 공식 의학 데이터베이스 실시간 연동 분석 중..."):
             try:
