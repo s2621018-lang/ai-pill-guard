@@ -4,7 +4,7 @@ from google import genai
 # 1. 앱 디자인
 st.set_page_config(page_title="AI 약 결합 안전 분석기", page_icon="🛡️")
 st.title("🛡️ AI 약 결합 안전 분석기")
-st.markdown("##### 실시간 의약품 종합 분석 시스템 (Standard AI Mode)")
+st.markdown("##### 실시간 의약품 종합 분석 시스템 (Secure Mode)")
 
 # 2. 입력창
 drug1 = st.text_input("첫 번째 약 이름을 입력하세요 (예: 노바스크, 타이레놀)", value="")
@@ -18,13 +18,12 @@ if st.button("실시간 상호작용 종합 분석 시작"):
         st.write("---")
         st.subheader("📋 안전 분석 보고서")
         
-        # 🔑 하린이의 진짜 API 키 (AIzaSy로 시작하는 키)를 여기에 정확히 넣어줘!
-        # 만약 아래 키로 에러가 나면 아까 구글 AI 스튜디오에서 복사한 진짜 키로 바꿔줘!
-        api_key = "AQ.Ab8RN6Io4apMxd1tWy-fJ_STORynv9U-X2hNkn13o8IifoFbfQ" 
-        
         with st.spinner("🔍 구글 공식 의학 데이터베이스 실시간 연동 분석 중..."):
             try:
-                # 구글 정식 라이브러리로 안전하게 연결 (주소 꼬임 완벽 방지!)
+                # 🔒 중요: 스트림릿 시스템 금고(Secrets)에서 키를 자동으로 꺼내옵니다!
+                # 코드에 직접 키를 적지 않으므로 복사 오류가 원천 차단됩니다.
+                api_key = st.secrets["GEMINI_API_KEY"]
+                
                 client = genai.Client(api_key=api_key)
                 
                 prompt = (
@@ -40,14 +39,12 @@ if st.button("실시간 상호작용 종합 분석 시작"):
                     "이유: [어르신이 이해하기 쉽게 '그래서 두 약을 같이 먹어도 된다/안 된다'라는 명확한 결론을 짚은 한 줄 설명]"
                 )
                 
-                # 구글 공식 최신 모델 호출
                 response = client.models.generate_content(
                     model='gemini-1.5-flash',
                     contents=prompt,
                 )
                 ai_response = response.text.strip()
                 
-                # 결과 분류 파싱
                 status = "SAFE"
                 reason_text = "안심하고 복용하셔도 좋습니다."
                 
@@ -61,9 +58,8 @@ if st.button("실시간 상호작용 종합 분석 시작"):
                         
             except Exception as e:
                 status = "WARNING"
-                reason_text = f"구글 AI 통신 오류가 발생했습니다. (에러내용: {str(e)})"
+                reason_text = f"구글 AI 통신 오류가 발생했습니다. (금고 모드 에러: {str(e)})"
 
-        # 3. 신호등 UI 출력
         if status == "DANGER":
             st.error("✅ 최종 판정 등급: DANGER (위험)")
             st.info(f"❌ {reason_text}")
