@@ -19,7 +19,7 @@ if st.button("실시간 상호작용 종합 분석 시작"):
         st.subheader("📋 안전 분석 보고서")
         
         # 🔑 하린이의 안전한 무료 마스터 API 키
-        api_key = "AQ.Ab8RN6KVvB6rUWeg72IeFO3bwElSnab_1fC_HWKOK8W71-6sIQ"
+        api_key = "AQ.Ab8RN6Io4apMxd1tWy-fJ_STORynv9U-X2hNkn13o8IifoFbfQ"
         
         # 🤖 구글 최신 AI에게 내리는 엄격한 의학적 분석 규칙 (프롬프트 엔지니어링 적용)
         prompt = (
