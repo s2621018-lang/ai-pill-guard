@@ -5,95 +5,95 @@ import xml.etree.ElementTree as ET
 # 1. 앱 디자인
 st.set_page_config(page_title="AI 약 결합 안전 분석기", page_icon="🛡️")
 st.title("🛡️ AI 약 결합 안전 분석기")
-st.markdown("##### 식품의약품안전처 공식 데이터 이중화 연동 시스템 (Fail-Safe Mode)")
+st.markdown("##### 식품의약품안전처 공식 '병용금기' 실시간 결합 분석 시스템")
 
-# 2. 식약처 서버와 통신하는 핵심 함수 구상
-def fetch_drug_info(service_key, drug_name):
-    url = "https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList"
+# 2. 식약처 병용금기 API 서버와 통신하는 함수
+def check_dur_interaction(service_key, drug_a, drug_b):
+    # 식약처 의약품 안전성 정보(DUR) 병용금기 지정 URL
+    url = "https://apis.data.go.kr/1471000/DURPrductntfInfoService03/getUsgAtentInforegList03"
+    
+    # 약물 A를 기준으로 병용금기 데이터 검색
     params = {
         'serviceKey': service_key,
-        'itemName': drug_name,
+        'itemName': drug_a,
         'pageNo': '1',
-        'numOfRows': '1'
+        'numOfRows': '100'  # 금기 조합을 넉넉히 가져와서 비교
     }
-    # 3초 동안 응답 없으면 타임아웃 에러를 내도록 설정
-    response = requests.get(url, params=params, timeout=3)
+    
+    response = requests.get(url, params=params, timeout=4)
     return response
 
-# 3. 입력창
-drug_name = st.text_input("조회할 약 이름을 입력하세요 (예: 타이레놀, 노바스크)", value="")
+# 3. 입력창 (하린이의 원래 기획대로 약 두 개를 입력받음!)
+drug1 = st.text_input("첫 번째 약 이름을 입력하세요 (예: 노바스크, 타이레놀)", value="")
+drug2 = st.text_input("두 번째 약/영양제 이름을 입력하세요 (예: 플라빅스, 아스피린)", value="")
 
-if st.button("식약처 실시간 약효 및 부작용 분석 시작"):
-    if not drug_name:
-        st.warning("⚠️ 약 이름을 입력해 주세요!")
+if st.button("식약처 실시간 결합 안전성 분석 시작"):
+    if not drug1 or not drug2:
+        st.warning("⚠️ 약물 결합 분석을 위해 두 가지 약 이름을 모두 입력해 주세요!")
     else:
         st.write("---")
-        st.subheader(f"📋 식약처 등록 [{drug_name}] 공식 정보")
+        st.subheader(f"📋 [{drug1}] + [{drug2}] 결합 분석 보고서")
         
-        with st.spinner("🏥 대한민국 식약처 서버 이중 경로 실시간 대조 중..."):
+        with st.spinner("🏥 대한민국 식약처 DUR 금기 데이터베이스 실시간 교차 대조 중..."):
             response = None
-            success_key_name = ""
             
-            # 🔄 [하린이의 이중화 알고리즘] 
-            # 시도 1: 첫 번째 인증키(DATA_KEY_1)로 먼저 찔러보기
+            # 이중화 인증키 허브 가동 (하린이의 이중 열쇠 시스템)
             try:
                 key1 = st.secrets["DATA_KEY_1"]
-                res = fetch_drug_info(key1, drug_name)
-                # 서버가 정상 응답(200)을 주고, 결과에 에러 메시지가 없는지 검증
+                res = check_dur_interaction(key1, drug1, drug2)
                 if res.status_code == 200 and "INVALID_" not in res.text:
                     response = res
-                    success_key_name = "인증키 1번"
-            except Exception as e:
-                pass # 에러가 나면 무시하고 2번 키로 넘어갑니다.
+            except:
+                pass
 
-            # 시도 2: 만약 1번 키가 실패했다면, 두 번째 인증키(DATA_KEY_2)로 즉시 자동 전환!
             if response is None:
                 try:
                     key2 = st.secrets["DATA_KEY_2"]
-                    res = fetch_drug_info(key2, drug_name)
+                    res = check_dur_interaction(key2, drug1, drug2)
                     if res.status_code == 200 and "INVALID_" not in res.text:
                         response = res
-                        success_key_name = "인증키 2번 (교체 완료)"
-                except Exception as e:
+                except:
                     pass
 
-            # 4. 화면 출력 알고리즘
+            # 4. 결합 위험성 판정 알고리즘
             if response is not None:
                 try:
                     root = ET.fromstring(response.text)
-                    item = root.find(".//item")
+                    items = root.findall(".//item")
                     
-                    if item is not None:
-                        # HTML 태그 지워주는 꼼꼼한 세부 필터링
-                        def clean_text(element):
-                            if element is not None and element.text:
-                                import re
-                                return re.sub('<[^<]+?>', '', element.text).strip()
-                            return "등록된 정보가 없습니다."
-
-                        effect = clean_text(item.find("efcyQesitm"))
-                        use_method = clean_text(item.find("useMethodQesitm"))
-                        warning = clean_text(item.find("atpnQesitm"))
-                        side_effect = clean_text(item.find("seQesitm"))
-                        
-                        # 몇 번 키로 성공했는지 화면에 슬쩍 표시해 주기!
-                        st.success(f"✅ 식약처 데이터베이스 매칭 성공! ({success_key_name} 사용됨)")
-                        
-                        st.markdown("### 🍏 이 약의 효능")
-                        st.info(effect)
-                        
-                        st.markdown("### 🕒 올바른 복용 방법")
-                        st.info(use_method)
-                        
-                        st.markdown("### 🚨 복용 시 주의사항 (병용 금기 및 식품)")
-                        st.warning(warning)
-                        
-                        st.markdown("### ❌ 발생 가능한 부작용")
-                        st.error(side_effect)
+                    is_dangerous = False
+                    reason_text = ""
+                    prohbt_reason = "" # 금기 사유
+                    
+                    # 입력된 두 약물의 공백을 제거하여 매칭 확률 업
+                    d2_clean = drug2.replace(" ", "").lower()
+                    
+                    # 식약처에서 가져온 약물A의 병용금기 리스트를 하나씩 돌며 약물B가 포함되어 있는지 대조
+                    for item in items:
+                        mixture_item = item.find("MIXTURE_ITEM_NAME") # 함께 먹으면 안 되는 약 이름 칸
+                        if mixture_item is not None and mixture_item.text:
+                            mix_name = mixture_item.text.replace(" ", "").lower()
+                            
+                            # 금기 리스트에 사용자가 입력한 두 번째 약(drug2)이 걸려들었을 때!
+                            if d2_clean in mix_name or mix_name in d2_clean:
+                                is_dangerous = True
+                                # 식약처가 지정한 공식 금기 사유 추출
+                                reason_el = item.find("PROHBT_CONTENT")
+                                if reason_el is not None and reason_el.text:
+                                    prohbt_reason = reason_el.text
+                                break
+                    
+                    # 5. 신호등 UI 최종 출력
+                    if is_dangerous:
+                        st.error("✅ 최종 판정 등급: DANGER (위험 - 병용 금기)")
+                        st.info(f"❌ 대한민국 식품의약품안전처 규정상 두 약물은 함께 복용해서는 안 되는 '병용금기' 조합입니다.")
+                        if prohbt_reason:
+                            st.warning(f"💡 식약처 지정 사유: {prohbt_reason}")
                     else:
-                        st.warning(f"🔍 식약처에 [{drug_name}] 등록 정보를 찾지 못했습니다. 이름을 확인해 주세요.")
+                        st.success("✅ 최종 판정 등급: SAFE (안전)")
+                        st.info(f"🍏 식약처 DUR 실시간 조회 결과, [{drug1}]와 [{drug2}]의 공식적인 병용 금기 상호작용은 발견되지 않았습니다. 안심하셔도 좋습니다. (단, 특이 체질의 경우 의사 상의 필요)")
+                        
                 except Exception as parse_error:
-                    st.error("❌ 데이터 해석 중 오류가 발생했습니다.")
+                    st.error("❌ 식약처 데이터를 분석하는 과정에서 오류가 발생했습니다.")
             else:
-                # 두 열쇠가 모두 거부당했을 때의 최종 경고
-                st.error("❌ [연동 실패] 발급받으신 두 개의 식약처 인증키가 모두 만료되었거나 올바르지 않습니다. 공공데이터포털에서 키 상태를 확인해 주세요.")
+                st.error("❌ 식약처 서버 연동에 실패했습니다. 인증키를 다시 확인해 주세요.")
