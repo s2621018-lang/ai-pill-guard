@@ -1,59 +1,99 @@
 import streamlit as st
+import requests
+import xml.etree.ElementTree as ET
 
 # 1. 앱 디자인
 st.set_page_config(page_title="AI 약 결합 안전 분석기", page_icon="🛡️")
 st.title("🛡️ AI 약 결합 안전 분석기")
-st.markdown("##### 실시간 의약품 종합 분석 시스템 (Safe Local Mode)")
+st.markdown("##### 식품의약품안전처 공식 데이터 이중화 연동 시스템 (Fail-Safe Mode)")
 
-# 2. 입력창
-drug1 = st.text_input("첫 번째 약 이름을 입력하세요 (예: 노바스크, 타이레놀)", value="")
-drug2 = st.text_input("두 번째 약/영양제 이름을 입력하세요 (선택)", value="")
-bev = st.text_input("함께 마실 음료나 식품을 입력하세요 (선택)", value="")
+# 2. 식약처 서버와 통신하는 핵심 함수 구상
+def fetch_drug_info(service_key, drug_name):
+    url = "https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList"
+    params = {
+        'serviceKey': service_key,
+        'itemName': drug_name,
+        'pageNo': '1',
+        'numOfRows': '1'
+    }
+    # 3초 동안 응답 없으면 타임아웃 에러를 내도록 설정
+    response = requests.get(url, params=params, timeout=3)
+    return response
 
-if st.button("실시간 상호작용 종합 분석 시작"):
-    if not drug1:
-        st.warning("⚠️ 분석을 위해 최소한 첫 번째 약 이름을 입력해 주세요!")
+# 3. 입력창
+drug_name = st.text_input("조회할 약 이름을 입력하세요 (예: 타이레놀, 노바스크)", value="")
+
+if st.button("식약처 실시간 약효 및 부작용 분석 시작"):
+    if not drug_name:
+        st.warning("⚠️ 약 이름을 입력해 주세요!")
     else:
         st.write("---")
-        st.subheader("📋 안전 분석 보고서")
+        st.subheader(f"📋 식약처 등록 [{drug_name}] 공식 정보")
         
-        with st.spinner("🔍 의약품 통합 데이터베이스 및 자체 매칭 알고리즘 가동 중..."):
-            # 소문자 공백 제거로 정확한 매칭
-            d1 = drug1.replace(" ", "").lower()
-            d2 = drug2.replace(" ", "").lower() if drug2 else ""
-            b = bev.replace(" ", "").lower() if bev else ""
+        with st.spinner("🏥 대한민국 식약처 서버 이중 경로 실시간 대조 중..."):
+            response = None
+            success_key_name = ""
             
-            status = "SAFE"
-            reason_text = f"입력하신 [{drug1}]는 복용 기준에 부합하며 안심하고 드셔도 좋습니다."
-            
-            # 💡 하린이의 꼼꼼한 약물 상호작용 데이터베이스 규칙 설정
-            # 1. 자몽주스 고혈압약 위험군
-            if "자몽" in b and ("노바스크" in d1 or "amlodipine" in d1 or "노바스크" in d2 or "amlodipine" in d2):
-                status = "DANGER"
-                reason_text = "고혈압 약(노바스크 등)은 자몽주스와 함께 드시면 약 성분이 몸에 과도하게 흡수되어 혈압이 급격히 떨어질 수 있어 매우 위험합니다. 반드시 맹물과 함께 복용하세요."
-            
-            # 2. 타이레놀 + 술 위험군
-            elif ("술" in b or "맥주" in b or "소주" in b or "알코올" in b) and ("타이레놀" in d1 or "아세트아미노펜" in d1 or "타이레놀" in d2 or "아세트아미노펜" in d2):
-                status = "DANGER"
-                reason_text = "타이레놀(아세트아미노펜) 성분은 알코올과 만나면 간에 심각한 손상을 줄 수 있습니다. 음주 전후에는 절대 복용하지 마십시오."
-                
-            # 3. 타이레놀 + 종합감기약 중복 주의
-            elif ("타이레놀" in d1 and ("감기약" in d2 or "판콜" in d2 or "판피린" in d2)) or ("타이레놀" in d2 and ("감기약" in d1 or "판콜" in d1 or "판피린" in d1)):
-                status = "WARNING"
-                reason_text = "타이레놀과 종합감기약에는 동일한 '아세트아미노펜' 성분이 중복 함유되어 있을 확률이 높습니다. 과다 복용 시 간 손상 위험이 있으니 성분표를 확인하시거나 약사님과 상의하세요."
-            
-            # 4. 우유 + 항생제/소화제 주의
-            elif "우유" in b and ("항생제" in d1 or "소화제" in d1 or "항생제" in d2 or "소화제" in d2):
-                status = "WARNING"
-                reason_text = "우유 속 칼슘 성분이 일부 약물(항생제, 소화제 등)의 체내 흡수를 방해하여 약효를 떨어뜨릴 수 있습니다. 약은 되도록 물과 드시는 것이 좋습니다."
+            # 🔄 [하린이의 이중화 알고리즘] 
+            # 시도 1: 첫 번째 인증키(DATA_KEY_1)로 먼저 찔러보기
+            try:
+                key1 = st.secrets["DATA_KEY_1"]
+                res = fetch_drug_info(key1, drug_name)
+                # 서버가 정상 응답(200)을 주고, 결과에 에러 메시지가 없는지 검증
+                if res.status_code == 200 and "INVALID_" not in res.text:
+                    response = res
+                    success_key_name = "인증키 1번"
+            except Exception as e:
+                pass # 에러가 나면 무시하고 2번 키로 넘어갑니다.
 
-        # 3. 신호등 UI 출력
-        if status == "DANGER":
-            st.error("✅ 최종 판정 등급: DANGER (위험)")
-            st.info(f"❌ {reason_text}")
-        elif status == "WARNING":
-            st.warning("✅ 최종 판정 등급: WARNING (주의)")
-            st.info(f"🚨 {reason_text}")
-        else:
-            st.success("✅ 최종 판정 등급: SAFE (안전)")
-            st.info(f"🍏 {reason_text}")
+            # 시도 2: 만약 1번 키가 실패했다면, 두 번째 인증키(DATA_KEY_2)로 즉시 자동 전환!
+            if response is None:
+                try:
+                    key2 = st.secrets["DATA_KEY_2"]
+                    res = fetch_drug_info(key2, drug_name)
+                    if res.status_code == 200 and "INVALID_" not in res.text:
+                        response = res
+                        success_key_name = "인증키 2번 (교체 완료)"
+                except Exception as e:
+                    pass
+
+            # 4. 화면 출력 알고리즘
+            if response is not None:
+                try:
+                    root = ET.fromstring(response.text)
+                    item = root.find(".//item")
+                    
+                    if item is not None:
+                        # HTML 태그 지워주는 꼼꼼한 세부 필터링
+                        def clean_text(element):
+                            if element is not None and element.text:
+                                import re
+                                return re.sub('<[^<]+?>', '', element.text).strip()
+                            return "등록된 정보가 없습니다."
+
+                        effect = clean_text(item.find("efcyQesitm"))
+                        use_method = clean_text(item.find("useMethodQesitm"))
+                        warning = clean_text(item.find("atpnQesitm"))
+                        side_effect = clean_text(item.find("seQesitm"))
+                        
+                        # 몇 번 키로 성공했는지 화면에 슬쩍 표시해 주기!
+                        st.success(f"✅ 식약처 데이터베이스 매칭 성공! ({success_key_name} 사용됨)")
+                        
+                        st.markdown("### 🍏 이 약의 효능")
+                        st.info(effect)
+                        
+                        st.markdown("### 🕒 올바른 복용 방법")
+                        st.info(use_method)
+                        
+                        st.markdown("### 🚨 복용 시 주의사항 (병용 금기 및 식품)")
+                        st.warning(warning)
+                        
+                        st.markdown("### ❌ 발생 가능한 부작용")
+                        st.error(side_effect)
+                    else:
+                        st.warning(f"🔍 식약처에 [{drug_name}] 등록 정보를 찾지 못했습니다. 이름을 확인해 주세요.")
+                except Exception as parse_error:
+                    st.error("❌ 데이터 해석 중 오류가 발생했습니다.")
+            else:
+                # 두 열쇠가 모두 거부당했을 때의 최종 경고
+                st.error("❌ [연동 실패] 발급받으신 두 개의 식약처 인증키가 모두 만료되었거나 올바르지 않습니다. 공공데이터포털에서 키 상태를 확인해 주세요.")
