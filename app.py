@@ -1,90 +1,82 @@
 import streamlit as st
+import pandas as pd
+import os
 
-# 1. 앱 디자인 및 타이틀 설정
-st.set_page_config(page_title="AI 약 결합 안전 분석기", page_icon="🛡️")
-st.title("🛡️ AI 약 결합 안전 분석기")
-st.markdown("##### 대한민국 식품의약품안전처(MFDS) 공식 데이터 기반 결합 분석 시스템")
+# 페이지 기본 설정
+st.set_page_config(page_title="의약품 & 영양제 상극 분석기", page_icon="💊", layout="centered")
 
-# 2. 식약처 공식 의약품 주의사항 및 병용금기 마스터 데이터베이스 (하린이 앱 전용)
-DRUG_DATABASE = {
-    "노바스크": {
-        "type": "혈압약",
-        "warnings": ["자몽", "자몽주스", "이부프로펜", "부루펜", "이지엔6", "탁센", "나프록센"],
-        "reason": "자몽과 함께 복용 시 부작용 위험이 극도로 증가하며, 이부프로펜 계열 진통제와 복용 시 혈압 강하 효과가 크게 감소합니다."
-    },
-    "타이레놀": {
-        "type": "해열진통제 (아세트아미노펜)",
-        "warnings": ["술", "알코올", "음주"],
-        "reason": "복용 중 음주 시 간 손상 위험이 매우 높아집니다. 대부분의 혈압약(노바스크 등)과는 함께 복용해도 안전합니다."
-    },
-    "아스피린": {
-        "type": "소염진통제 / 항혈전제",
-        "warnings": ["케토톱", "플라빅스", "와파린", "이부프로펜", "부루펜"],
-        "reason": "다른 소염진통제나 피를 맑게 하는 약과 병용 시 위장관 출혈 및 멍이 드는 부작용 위험이 두 배 이상 증가합니다."
-    },
-    "부루펜": {
-        "type": "소염진통제 (이부프로펜)",
-        "warnings": ["노바스크", "아스피린", "탁센"],
-        "reason": "혈압약의 효과를 떨어뜨리거나, 다른 진통제와 겹쳐 복용 시 신장에 무리를 줄 수 있습니다."
-    },
-    "이지엔6": {
-        "type": "소염진통제 (이부프로펜)",
-        "warnings": ["노바스크", "아스피린", "탁센"],
-        "reason": "혈압약의 혈압 강하 효과를 방해하며, 위장 장애 유발 확률이 높아집니다."
-    },
-    "케토톱": {
-        "type": "외용소염진통제 (케토프로펜)",
-        "warnings": ["아스피린"],
-        "reason": "아스피린과 병용 시 부작용 위험이 커지므로 주의가 필요합니다."
-    }
-}
+# CSS로 앱 디자인 예쁘게 꾸미기
+st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stButton>button { width: 100%; background-color: #007bff; color: white; border-radius: 8px; }
+    .result-box { padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+    .danger { background-color: #ffebeb; border-left: 5px solid #dc3545; color: #b71c1c; }
+    .safe { background-color: #eafaf1; border-left: 5px solid #28a745; color: #155724; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# 3. 사용자 약물 입력창
-st.markdown("---")
-drug1 = st.text_input("첫 번째 약 이름을 입력하세요 (예: 노바스크, 타이레놀, 아스피린)", value="").strip()
-drug2 = st.text_input("두 번째 약/영양제 이름을 입력하세요 (예: 자몽주스, 이지엔6, 비타민)", value="").strip()
+st.title("💊 의약품 & 영양제 상극 분석기")
+st.write("먹을 약과 영양제를 입력하면 식약처 장부와 비교해 위험한 조합을 찾아드려요.")
 
-if st.button("식약처 마스터 데이터 결합 분석 시작"):
-    if not drug1 or not drug2:
-        st.warning("⚠️ 약물 결합 분석을 위해 두 가지 약 이름을 모두 입력해 주세요!")
+# 1. csv 파일 읽어오기 함수
+@st.cache_data
+def load_data():
+    file_name = "pills.csv"
+    if os.path.exists(file_name):
+        try:
+            # 콤마(,) 기준 3개의 열로 읽어오기
+            df = pd.read_csv(file_name, names=["약물1", "약물2", "부작용"], header=None, encoding='utf-8')
+            # 양옆 공백 제거
+            df["약물1"] = df["약물1"].str.strip()
+            df["약물2"] = df["약물2"].str.strip()
+            df["부작용"] = df["부작_"] = df["부작용"].str.strip()
+            return df
+        except Exception as e:
+            st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+            return pd.DataFrame(columns=["약물1", "약물2", "부작용"])
     else:
-        st.write("---")
-        st.subheader(f"📋 [{drug1}] + [{drug2}] 결합 분석 보고서")
-        
-        # 공백 제거 및 소문자화로 매칭 확률 업!
-        d1_clean = drug1.replace(" ", "")
-        d2_clean = drug2.replace(" ", "")
-        
-        is_dangerous = False
-        matched_reason = ""
-        
-        # 🔍 결합 알고리즘 가동
-        # 1번 약이 데이터베이스에 있고, 그 금기어 목록에 2번 약이 포함되어 있는지 확인
-        for db_drug in DRUG_DATABASE:
-            if db_drug in d1_clean:
-                for warning in DRUG_DATABASE[db_drug]["warnings"]:
-                    if warning in d2_clean or d2_clean in warning:
-                        is_dangerous = True
-                        matched_reason = DRUG_DATABASE[db_drug]["reason"]
-                        break
-                        
-        # 반대로 2번 약 기준에서도 1번 약이 금기어인지 교차 검증
-        if not is_dangerous:
-            for db_drug in DRUG_DATABASE:
-                if db_drug in d2_clean:
-                    for warning in DRUG_DATABASE[db_drug]["warnings"]:
-                        if warning in d1_clean or d1_clean in warning:
-                            is_dangerous = True
-                            matched_reason = DRUG_DATABASE[db_drug]["reason"]
-                            break
+        st.error("pills.csv 파일을 찾을 수 없습니다! 깃허브에 파일이 있는지 확인해 주세요.")
+        return pd.DataFrame(columns=["약물1", "약물2", "부작용"])
 
-        # 4. 신호등 UI 최종 결과 시각화 (오류 없이 즉시 실행!)
-        if is_dangerous:
-            st.error("✅ 최종 판정 등급: DANGER (위험 - 복용 주의 조합)")
-            st.info(f"❌ 대한민국 식품의약품안전처 규정상 두 성분은 병용 주의 조합입니다.\n\n💡 **이유:** {matched_reason}")
-        else:
-            st.success("✅ 최종 판정 등급: SAFE (안전)")
-            st.info(f"🍏 식약처 데이터 대조 결과, [{drug1}]와 [{drug2}] 간의 명확한 병용 금기 상호작용이 발견되지 않았습니다. 안심하고 복용하셔도 좋습니다.")
+db = load_data()
+
+# 2. 하단에 현재 연동된 데이터 개수 띄워주기
+if not db.empty:
+    st.info(f"💡 현재 시스템에 식약처 기반 **{len(db):,}개**의 금기 장부가 완벽하게 연동되어 있습니다!")
+
+st.divider()
+
+# 3. 사용자 입력 받기
+st.subheader("🔍 같이 먹을 약을 입력해 주세요")
+col1, col2 = st.columns(2)
+with col1:
+    pill_a = st.text_input("첫 번째 약/영양제 이름 (예: 타이레놀)", key="pill_a").strip()
+with col2:
+    pill_b = st.text_input("두 번째 약/영양제 이름 (예: 맥주)", key="pill_b").strip()
+
+# 4. 분석하기 버튼 클릭 시 로직
+if st.button("상호작용 분석 시작 🚀"):
+    if not pill_a or not pill_b:
+        st.warning("두 개의 약 이름을 모두 입력해 주세요!")
+    else:
+        # 대소문자나 띄어쓰기 에러 방지를 위해 검색용 텍스트 정제
+        with st.spinner("966개의 마스터 장부를 정밀 탐색하는 중..."):
             
-st.markdown("---")
-st.caption("본 서비스는 식약처 공식 배포 데이터를 기반으로 작동하는 하린이의 AI 약 결합 안전 분석기 프로토타입입니다.")
+            # 장부에서 두 약물이 교차로 들어간 행이 있는지 검색
+            match = db[
+                ((db["약물1"] == pill_a) & (db["약물2"] == pill_b)) |
+                ((db["약물1"] == pill_b) & (db["약물2"] == pill_a))
+            ]
+            
+            if not match.empty:
+                # 금기 조합을 찾았을 때
+                st.markdown(f"<div class='result-box danger'><h3>⚠️ 위험한 조합 발견!</h3></div>", unsafe_allow_html=True)
+                for idx, row in match.iterrows():
+                    st.error(f"**[{row['약물1']}]** 와(과) **[{row['약물2']}]** 은(는) 함께 복용 시 위험할 수 있습니다.")
+                    st.write(f"🛑 **부작용 경고:** {row['부작용']}")
+            else:
+                # 안전하거나 장부에 없을 때
+                st.markdown(f"<div class='result-box safe'><h3>✅ 분석 완료</h3></div>", unsafe_allow_html=True)
+                st.success(f"**[{pill_a}]** 와(과) **[{pill_b}]** 의 특이 상극 반응이 현재 장부(966개)에는 등록되어 있지 않습니다.")
+                st.caption("※ 본 서비스는 식약처 데이터를 기반으로 하며, 체질에 따른 부작용이 있을 수 있으니 전문의와 상의하세요.")
